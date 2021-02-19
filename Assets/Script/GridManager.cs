@@ -6,7 +6,7 @@ public class GridManager : MonoBehaviour
 {
     public static GridManager Instance;
 
-    public GridPoint[,] grid;
+    public Dictionary<(int, int), GridPoint> grid;
 
     public Camera mainCamera;
     public int size = 20;
@@ -59,7 +59,7 @@ public class GridManager : MonoBehaviour
         Vector2 noiseOffset = new Vector2(Random.Range(0f, 1000f), Random.Range(0f, 1000f));
         int safetyBorder = Mathf.RoundToInt(size / 15f);
 
-        grid = new GridPoint[size, size];
+        grid = new Dictionary<(int, int), GridPoint>();
         for (int x = 0; x < size; x++)
         {
             for (int y = 0; y < size; y++)
@@ -79,7 +79,7 @@ public class GridManager : MonoBehaviour
                             GridState.Free;
                 }
 
-                grid[x, y] = new GridPoint(x, y, state);
+                grid.Add((x, y), new GridPoint(x, y, state));
             }
         }
     }
@@ -102,12 +102,14 @@ public class GridManager : MonoBehaviour
             {
                 if (count >= tilePool.Count)
                     CreateNewTile();
-
-                tilePool[count].gameObject.SetActive(true);
-                tilePool[count].transform.position = grid[x, y].GetWorldPosition();
-                tilePool[count].color = grid[x, y].GetColor();
-
-                count++;
+                
+                if (grid.TryGetValue((x, y), out GridPoint point))
+                {
+                    tilePool[count].gameObject.SetActive(true);
+                    tilePool[count].transform.position = point.GetWorldPosition();
+                    tilePool[count].color = point.GetColor();
+                    count++;
+                }
             }
         }
 
