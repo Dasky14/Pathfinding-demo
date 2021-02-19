@@ -1,12 +1,14 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 public class GridManager : MonoBehaviour
 {
     public static GridManager Instance;
 
-    public Dictionary<(int, int), GridPoint> grid;
+    public Dictionary<(int, int), GridPoint> grid { get; private set; }
+    public List<GridPoint> gridList => grid.Values.ToList();
 
     public Camera mainCamera;
     public int size = 20;
