@@ -22,19 +22,43 @@ public class Pathfinder : MonoBehaviour
     }
 
     private Node[,] nodeGrid;
-    private Node startNode;
-    private Node endNode;
-
-
+    public Node startNode;
+    public Node endNode;
 
     private List<Node> openList;
     private List<Node> closedList;
+    private Node[] currentPath;
+    private Node currentNode;
 
+    private bool isRunning = false;
 
+    private void OnDrawGizmos()
+    {
+        if (currentPath != null && true)
+        {
+            Gizmos.color = Color.cyan;
+            foreach (var node in openList)
+            {
+                Gizmos.DrawCube(new Vector3(node.Position.x + 0.5f, node.Position.y + 0.5f, -0.5f), Vector3.one * 0.3f);
+            }
+            foreach (var node in closedList)
+            {
+                Gizmos.DrawCube(new Vector3(node.Position.x + 0.5f, node.Position.y + 0.5f, -0.5f), Vector3.one * 0.3f);
+            }
 
+            Gizmos.color = Color.black;
+            foreach (Node step in currentPath)
+            {
+                Gizmos.DrawCube(new Vector3(step.Position.x + 0.5f, step.Position.y + 0.5f, -1f), Vector3.one * 0.3f);
+            }
+        }
+    }
 
     public void FindPathButtonPress()
     {
+        if (isRunning)
+            return;
+
         Initialise();
 
         if (pathLine == null)
@@ -43,20 +67,7 @@ public class Pathfinder : MonoBehaviour
             return;
         }
 
-        Node[] path = FindPath();
-
-        if (path == null)
-        {
-            Debug.Log("No path found!", this);
-            return;
-        }
-
-        pathLine.positionCount = path.Length;
-        for (int i = 0; i < path.Length; i++)
-        {
-            Node n = path[i];
-            pathLine.SetPosition(i, n.point.GetLocalPosition() + new Vector2(0.5f, 0.5f));
-        }
+        StartCoroutine(FindPath());
     }
 
     private void Initialise()
@@ -64,6 +75,8 @@ public class Pathfinder : MonoBehaviour
         nodeGrid = new Node[GridManager.Instance.size, GridManager.Instance.size];
         openList = new List<Node>();
         closedList = new List<Node>();
+        currentPath = null;
+        currentNode = null;
 
         List<GridPoint> points = GridManager.Instance.GridList;
 
@@ -73,9 +86,6 @@ public class Pathfinder : MonoBehaviour
 
             switch (point.state)
             {
-                case GridState.Difficult:
-                    n.cost *= 3;
-                    break;
                 case GridState.Start:
                     startNode = n;
                     break;
@@ -88,66 +98,55 @@ public class Pathfinder : MonoBehaviour
         }
     }
 
-
-
-
-
-
-
-    private Node[] FindPath()
+    private IEnumerator FindPath()
     {
+        isRunning = true;
+        yield return null;
+
         openList.Clear();
-        closedList.Clear();
 
         var start = startNode;
         var end = endNode;
 
-        start.heuristic = (endNode.Position - start.Position).magnitude;
+        start.g = 0f;
         openList.Add(start);
 
 
         while (openList.Count > 0)
         {
-            var bestNode = GetBestCell();
-            openList.Remove(bestNode);
+            currentNode = GetBestNode();
+            openList.Remove(currentNode);
+            closedList.Add(currentNode);
 
-            var neighbours = GetAdjacentNodes(bestNode);
-            for (int i = 0; i < neighbours.Count; i++)
+            currentPath = ConstructPath(currentNode);
+            yield return new WaitForSeconds(0.05f);
+
+            if (currentNode.Equals(end))
             {
-                var curNode = neighbours[i];
-
-                if (curNode == null)
-                    continue;
-                if (curNode == end)
-                {
-                    curNode.parentNode = bestNode;
-                    return ConstructPath(curNode);
-                }
-
-                var g = bestNode.cost + (curNode.Position - bestNode.Position).magnitude;
-                var h = (end.Position - curNode.Position).magnitude;
-
-                if (openList.Contains(curNode)/* && curNode.F < (g + h)*/)
-                    continue;
-                if (closedList.Contains(curNode)/* && curNode.F < (g + h)*/)
-                    continue;
-
-                curNode.cost = g;
-                curNode.heuristic = h;
-                curNode.parentNode = bestNode;
-
-                if (!openList.Contains(curNode))
-                    openList.Add(curNode);
+                currentPath = ConstructPath(end);
+                isRunning = false;
+                yield break;
             }
 
-            if (!closedList.Contains(bestNode))
-                closedList.Add(bestNode);
+            var neighbours = GetAdjacentNodes(currentNode);
+            foreach (var neighbour in neighbours)
+            {
+                float t_g = currentNode.g + GridDistance(currentNode, neighbour);
+                if (neighbour.point.state == GridState.Difficult) t_g += 3;
+                if (t_g < neighbour.g)
+                {
+                    neighbour.parentNode = currentNode;
+                    neighbour.g = t_g;
+                    if (!openList.Contains(neighbour))
+                        openList.Add(neighbour);
+                }
+            }
         }
 
-        return null;
+        isRunning = false;
     }
 
-    private Node GetBestCell()
+    private Node GetBestNode()
     {
         Node result = null;
         float currentF = float.PositiveInfinity;
@@ -181,14 +180,6 @@ public class Pathfinder : MonoBehaviour
         return path.ToArray();
     }
 
-
-
-
-
-
-
-
-
     private List<Node> GetAdjacentNodes(Node n)
     {
         int gridRows = GridManager.Instance.size;
@@ -196,8 +187,8 @@ public class Pathfinder : MonoBehaviour
 
         List<Node> temp = new List<Node>();
 
-        int row = n.point.x;
-        int col = n.point.y;
+        int col = n.point.x;
+        int row = n.point.y;
 
         if (row + 1 < gridRows && nodeGrid[col, row + 1].IsWalkable)
         {
@@ -216,7 +207,20 @@ public class Pathfinder : MonoBehaviour
             temp.Add(nodeGrid[col + 1, row]);
         }
 
+        foreach (var neighbour in temp)
+        {
+            if (GridDistance(n, neighbour) > 1)
+            {
+                Debug.LogWarning("Wtf");
+            }
+        }
+
         return temp;
+    }
+
+    public static float GridDistance(Node n1, Node n2)
+    {
+        return Mathf.Abs(n1.Position.x - n2.Position.x) + Mathf.Abs(n1.Position.y - n2.Position.y);
     }
 
 
@@ -229,14 +233,11 @@ public class Pathfinder : MonoBehaviour
         return newNode;
     }
 
-    private class Node
+    public class Node
     {
         public GridPoint point;
 
-        public Vector2 Position
-        {
-            get => point.Point;
-        }
+        public Vector2 Position => point.Point;
         public bool IsWalkable
         {
             get
@@ -248,18 +249,24 @@ public class Pathfinder : MonoBehaviour
             }
         }
 
-        public float distanceToTarget = -1f;
-        public float cost = 1f;
-        public float heuristic = 1f;
-        public float F
+        public float g = float.PositiveInfinity;
+
+        public float H
         {
             get
             {
-                return cost + heuristic;
+                return GridDistance(this, Instance.endNode);
             }
         }
 
+        public float F => g + H;
+
         public Node parentNode = null;
+
+        public bool Equals(Node n)
+        {
+            return (point.x == n.point.x && point.y == n.point.y);
+        }
     }
 
     public enum NodeState { Untested, Open, Closed }
