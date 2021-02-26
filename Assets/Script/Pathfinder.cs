@@ -70,13 +70,19 @@ public class Pathfinder : MonoBehaviour
         StartCoroutine(FindPath());
     }
 
-    private void Initialise()
+    public void ClearPath()
     {
         nodeGrid = new Node[GridManager.Instance.size, GridManager.Instance.size];
         openList = new List<Node>();
         closedList = new List<Node>();
         currentPath = null;
         currentNode = null;
+        isRunning = false;
+    } 
+
+    private void Initialise()
+    {
+        ClearPath();
 
         List<GridPoint> points = GridManager.Instance.GridList;
 
@@ -109,17 +115,22 @@ public class Pathfinder : MonoBehaviour
         var end = endNode;
 
         start.g = 0f;
+        start.f = start.H;
         openList.Add(start);
 
 
         while (openList.Count > 0)
         {
+            
+
             currentNode = GetBestNode();
             openList.Remove(currentNode);
             closedList.Add(currentNode);
 
             currentPath = ConstructPath(currentNode);
             yield return new WaitForSeconds(0.05f);
+            if (!isRunning)
+                yield break;
 
             if (currentNode.Equals(end))
             {
@@ -132,11 +143,12 @@ public class Pathfinder : MonoBehaviour
             foreach (var neighbour in neighbours)
             {
                 float t_g = currentNode.g + GridDistance(currentNode, neighbour);
-                if (neighbour.point.state == GridState.Difficult) t_g += 3;
+                if (neighbour.point.state == GridState.Difficult) t_g += 1;
                 if (t_g < neighbour.g)
                 {
                     neighbour.parentNode = currentNode;
                     neighbour.g = t_g;
+                    neighbour.f = neighbour.g + neighbour.H;
                     if (!openList.Contains(neighbour))
                         openList.Add(neighbour);
                 }
@@ -155,9 +167,9 @@ public class Pathfinder : MonoBehaviour
         {
             var cell = openList[i];
 
-            if (cell.F < currentF)
+            if (cell.f < currentF)
             {
-                currentF = cell.F;
+                currentF = cell.f;
                 result = cell;
             }
         }
@@ -190,22 +202,19 @@ public class Pathfinder : MonoBehaviour
         int col = n.point.x;
         int row = n.point.y;
 
-        if (row + 1 < gridRows && nodeGrid[col, row + 1].IsWalkable)
+        for (int x = -1; x <= 1; x++)
         {
-            temp.Add(nodeGrid[col, row + 1]);
+            for (int y = -1; y <= 1; y++)
+            {
+                if (col + x < 0 || col + x >= gridCols || row + y < 0 || row + y >= gridRows)
+                    continue;
+
+                Node c = nodeGrid[col + x, row + y];
+                if (c.IsWalkable)
+                    temp.Add(c);
+            }
         }
-        if (row - 1 >= 0 && nodeGrid[col, row - 1].IsWalkable)
-        {
-            temp.Add(nodeGrid[col, row - 1]);
-        }
-        if (col - 1 >= 0 && nodeGrid[col - 1, row].IsWalkable)
-        {
-            temp.Add(nodeGrid[col - 1, row]);
-        }
-        if (col + 1 < gridCols && nodeGrid[col + 1, row].IsWalkable)
-        {
-            temp.Add(nodeGrid[col + 1, row]);
-        }
+
 
         foreach (var neighbour in temp)
         {
@@ -220,7 +229,7 @@ public class Pathfinder : MonoBehaviour
 
     public static float GridDistance(Node n1, Node n2)
     {
-        return Mathf.Abs(n1.Position.x - n2.Position.x) + Mathf.Abs(n1.Position.y - n2.Position.y);
+        return Mathf.Max(Mathf.Abs(n1.Position.x - n2.Position.x), Mathf.Abs(n1.Position.y - n2.Position.y));
     }
 
 
@@ -251,15 +260,9 @@ public class Pathfinder : MonoBehaviour
 
         public float g = float.PositiveInfinity;
 
-        public float H
-        {
-            get
-            {
-                return GridDistance(this, Instance.endNode);
-            }
-        }
+        public float H => GridDistance(this, Instance.endNode);
 
-        public float F => g + H;
+        public float f = float.PositiveInfinity;
 
         public Node parentNode = null;
 
