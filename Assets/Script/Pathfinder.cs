@@ -3,12 +3,22 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using UnityEngine.UI;
+using TMPro;
 
 public class Pathfinder : MonoBehaviour
 {
     public static Pathfinder Instance;
 
+    [Header("Line")]
     public LineRenderer pathLine = null;
+
+    [Header("UI Elements")]
+    public Slider speedSlider = null;
+    public Slider difficultTerrainSlider = null;
+    public TMP_Dropdown distanceDropdown = null;
+    public Toggle tiebreakerToggle = null;
+    public Button stopButton = null;
 
     private void Awake()
     {
@@ -30,6 +40,7 @@ public class Pathfinder : MonoBehaviour
     private Node[] currentPath;
     private Node currentNode;
 
+
     private bool isRunning = false;
 
     private void OnDrawGizmos()
@@ -45,12 +56,31 @@ public class Pathfinder : MonoBehaviour
             {
                 Gizmos.DrawCube(new Vector3(node.Position.x + 0.5f, node.Position.y + 0.5f, -0.5f), Vector3.one * 0.3f);
             }
+        }
+    }
 
-            Gizmos.color = Color.black;
-            foreach (Node step in currentPath)
-            {
-                Gizmos.DrawCube(new Vector3(step.Position.x + 0.5f, step.Position.y + 0.5f, -1f), Vector3.one * 0.3f);
-            }
+    private void Update()
+    {
+        // Button states
+        difficultTerrainSlider.interactable = !isRunning;
+        distanceDropdown.interactable = !isRunning;
+        tiebreakerToggle.interactable = !isRunning;
+        stopButton.interactable = isRunning;
+
+        // Path line
+        if (currentPath != null && currentPath.Length > 0)
+        {
+            if (!pathLine.enabled)
+                pathLine.enabled = true;
+
+            pathLine.positionCount = currentPath.Length;
+            for (int i = 0; i < currentPath.Length; i++)
+                pathLine.SetPosition(i, currentPath[i].Position + new Vector2(0.5f, 0.5f));
+        }
+        else
+        {
+            if (pathLine.enabled)
+                pathLine.enabled = false;
         }
     }
 
@@ -118,6 +148,7 @@ public class Pathfinder : MonoBehaviour
         start.f = start.H;
         openList.Add(start);
 
+        float difficultyMult = difficultTerrainSlider.value;
 
         while (openList.Count > 0)
         {
@@ -128,7 +159,10 @@ public class Pathfinder : MonoBehaviour
             closedList.Add(currentNode);
 
             currentPath = ConstructPath(currentNode);
-            yield return new WaitForSeconds(0.05f);
+
+            float waitTime = 0.5f / speedSlider.value;
+            yield return new WaitForSeconds(waitTime);
+
             if (!isRunning)
                 yield break;
 
@@ -143,7 +177,7 @@ public class Pathfinder : MonoBehaviour
             foreach (var neighbour in neighbours)
             {
                 float t_g = currentNode.g + GridDistance(currentNode, neighbour);
-                if (neighbour.point.state == GridState.Difficult) t_g += 1;
+                if (neighbour.point.state == GridState.Difficult) t_g += 1 * difficultyMult;
                 if (t_g < neighbour.g)
                 {
                     neighbour.parentNode = currentNode;
@@ -162,15 +196,27 @@ public class Pathfinder : MonoBehaviour
     {
         Node result = null;
         float currentF = float.PositiveInfinity;
+        Node currentNode = null;
+        bool tiebreaker = tiebreakerToggle.isOn;
 
         for (int i = 0; i < openList.Count; i++)
         {
-            var cell = openList[i];
+            var node = openList[i];
 
-            if (cell.f < currentF)
+            if (node.f < currentF)
             {
-                currentF = cell.f;
-                result = cell;
+                currentF = node.f;
+                currentNode = node;
+                result = node;
+            }
+            else if (tiebreaker 
+                     && node.f == currentF 
+                     && currentNode != null 
+                     && node.H < result.H)
+            {
+                currentF = node.f;
+                currentNode = node;
+                result = node;
             }
         }
 
@@ -215,21 +261,24 @@ public class Pathfinder : MonoBehaviour
             }
         }
 
-
-        foreach (var neighbour in temp)
-        {
-            if (GridDistance(n, neighbour) > 1)
-            {
-                Debug.LogWarning("Wtf");
-            }
-        }
-
         return temp;
     }
 
     public static float GridDistance(Node n1, Node n2)
     {
-        return Mathf.Max(Mathf.Abs(n1.Position.x - n2.Position.x), Mathf.Abs(n1.Position.y - n2.Position.y));
+        int sel = Instance.distanceDropdown.value;
+
+        switch (sel)
+        {
+            case 0:
+                return Vector2.Distance(n1.Position, n2.Position);
+            case 1:
+                return Mathf.Max(Mathf.Abs(n1.Position.x - n2.Position.x), Mathf.Abs(n1.Position.y - n2.Position.y));
+            default:
+                // Defaults to real
+                return Vector2.Distance(n1.Position, n2.Position);
+        }
+
     }
 
 
