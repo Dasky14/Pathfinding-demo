@@ -17,6 +17,7 @@ public class Pathfinder : MonoBehaviour
     public Slider speedSlider = null;
     public Slider difficultTerrainSlider = null;
     public TMP_Dropdown distanceDropdown = null;
+    public TMP_Dropdown movementDropdown = null;
     public Toggle tiebreakerToggle = null;
     public Button stopButton = null;
 
@@ -42,6 +43,8 @@ public class Pathfinder : MonoBehaviour
 
 
     private bool isRunning = false;
+
+    float tiebreakerMult = 1f;
 
     private void OnDrawGizmos()
     {
@@ -115,6 +118,7 @@ public class Pathfinder : MonoBehaviour
         ClearPath();
 
         List<GridPoint> points = GridManager.Instance.GridList;
+        tiebreakerMult = 1 + (1 / (GridManager.Instance.size * GridManager.Instance.size));
 
         foreach (var point in points)
         {
@@ -145,15 +149,12 @@ public class Pathfinder : MonoBehaviour
         var end = endNode;
 
         start.g = 0f;
-        start.f = start.H;
         openList.Add(start);
 
         float difficultyMult = difficultTerrainSlider.value;
 
         while (openList.Count > 0)
         {
-            
-
             currentNode = GetBestNode();
             openList.Remove(currentNode);
             closedList.Add(currentNode);
@@ -182,7 +183,6 @@ public class Pathfinder : MonoBehaviour
                 {
                     neighbour.parentNode = currentNode;
                     neighbour.g = t_g;
-                    neighbour.f = neighbour.g + neighbour.H;
                     if (!openList.Contains(neighbour))
                         openList.Add(neighbour);
                 }
@@ -196,26 +196,14 @@ public class Pathfinder : MonoBehaviour
     {
         Node result = null;
         float currentF = float.PositiveInfinity;
-        Node currentNode = null;
-        bool tiebreaker = tiebreakerToggle.isOn;
 
         for (int i = 0; i < openList.Count; i++)
         {
             var node = openList[i];
 
-            if (node.f < currentF)
+            if (node.F < currentF)
             {
-                currentF = node.f;
-                currentNode = node;
-                result = node;
-            }
-            else if (tiebreaker 
-                     && node.f == currentF 
-                     && currentNode != null 
-                     && node.H < result.H)
-            {
-                currentF = node.f;
-                currentNode = node;
+                currentF = node.F;
                 result = node;
             }
         }
@@ -255,6 +243,11 @@ public class Pathfinder : MonoBehaviour
                 if (col + x < 0 || col + x >= gridCols || row + y < 0 || row + y >= gridRows)
                     continue;
 
+                if (Instance.movementDropdown.value == 1
+                    && (x == -1 || x == 1)
+                    && (y == -1 || y == 1))
+                    continue;
+
                 Node c = nodeGrid[col + x, row + y];
                 if (c.IsWalkable)
                     temp.Add(c);
@@ -271,9 +264,13 @@ public class Pathfinder : MonoBehaviour
         switch (sel)
         {
             case 0:
-                return Vector2.Distance(n1.Position, n2.Position);
+                float dx = Mathf.Abs(n1.Position.x - n2.Position.x);
+                float dy = Mathf.Abs(n1.Position.y - n2.Position.y);
+                return (dx + dy) + (Mathf.Sqrt(2) - 2) * Mathf.Min(dx, dy);
             case 1:
-                return Mathf.Max(Mathf.Abs(n1.Position.x - n2.Position.x), Mathf.Abs(n1.Position.y - n2.Position.y));
+                return Mathf.Abs(n1.Position.x - n2.Position.x) + Mathf.Abs(n1.Position.y - n2.Position.y);
+            case 2:
+                return Vector2.Distance(n1.Position, n2.Position);
             default:
                 // Defaults to real
                 return Vector2.Distance(n1.Position, n2.Position);
@@ -286,6 +283,7 @@ public class Pathfinder : MonoBehaviour
     {
         Node newNode = new Node();
 
+        newNode.tiebreakerMult = tiebreakerMult;
         newNode.point = point;
 
         return newNode;
@@ -307,11 +305,13 @@ public class Pathfinder : MonoBehaviour
             }
         }
 
+        public float tiebreakerMult = 1f;
+
         public float g = float.PositiveInfinity;
 
         public float H => GridDistance(this, Instance.endNode);
 
-        public float f = float.PositiveInfinity;
+        public float F => g + (H * tiebreakerMult);
 
         public Node parentNode = null;
 
